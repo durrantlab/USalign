@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>US-align WASM Test</title>
+</head>
+<body>
+    <h1>US-align WebAssembly Test</h1>
+    <p>Check the browser's developer console for the alignment output.</p>
+
+    <script type="module">
+        // Import the generated JavaScript glue code for USalign
+        // Emscripten modules are functions that return a promise.
+        import USalignModuleFactory from './USalign.js';
+
+        // An async function to run the main logic
+        async function runUSalign() {
+            console.log("Initializing US-align module...");
+
+            // Instantiate the module. This returns a promise that resolves to the module instance.
+            const usalign = await USalignModuleFactory();
+
+            console.log("US-align module initialized.");
+
+            // PDB content for two simple structures
+            const pdb1Content = `
+ATOM      1  CA  GLY A   1      27.345  24.435  29.345
+ATOM      2  CA  ALA A   2      28.100  28.000  30.100
+ATOM      3  CA  VAL A   3      30.000  30.000  28.000
+TER
+`;
+            const pdb2Content = `
+ATOM      1  CA  GLY B   1      33.123  55.567  12.345
+ATOM      2  CA  ALA B   2      34.123  58.567  13.345
+ATOM      3  CA  VAL B   3      36.123  60.567  11.345
+TER
+`;
+
+            // Write the PDB content to files in the virtual file system
+            try {
+                usalign.FS.writeFile('structure1.pdb', pdb1Content);
+                usalign.FS.writeFile('structure2.pdb', pdb2Content);
+                console.log("Created virtual files: structure1.pdb, structure2.pdb");
+            } catch (e) {
+                console.error("Error writing files to virtual FS:", e);
+                return;
+            }
+
+            // Define the command-line arguments for US-align
+            const args = ['structure1.pdb', 'structure2.pdb'];
+            console.log("Running US-align with args:", args);
+
+            // Call the main function. Output will go to the console.
+            try {
+                usalign.callMain(args);
+            } catch (e) {
+                console.error("Error running usalign.callMain:", e);
+            }
+
+            console.log("US-align execution finished.");
+        }
+
+        // Run the main async function
+        runUSalign();
+    </script>
+</body>
+</html>

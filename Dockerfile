@@ -1,25 +1,16 @@
-FROM gcc:12.2 as build
-COPY . /usr/src/usalign
-WORKDIR /usr/src/usalign
-RUN make -j
-RUN strip qTMclust USalign TMalign TMscore MMalign se pdb2xyz xyz_sfetch pdb2fasta pdb2ss NWalign HwRMSD cif2pdb
+# Use the official Emscripten SDK image as the base.
+# Using a specific version tag ensures reproducibility.
+FROM emscripten/emsdk:3.1.53
 
-# Don't use alpine since we need ubuntu's support
-FROM ubuntu:latest
-RUN mkdir /usr/bin/usalign
-WORKDIR /usr/bin/usalign
-COPY --from=build /usr/src/usalign/qTMclust /usr/bin/usalign/
-COPY --from=build /usr/src/usalign/USalign  /usr/bin/usalign/
-COPY --from=build /usr/src/usalign/TMalign  /usr/bin/usalign/
-COPY --from=build /usr/src/usalign/TMscore  /usr/bin/usalign/
-COPY --from=build /usr/src/usalign/MMalign  /usr/bin/usalign/
-COPY --from=build /usr/src/usalign/se  /usr/bin/usalign/
-COPY --from=build /usr/src/usalign/pdb2xyz  /usr/bin/usalign/
-COPY --from=build /usr/src/usalign/xyz_sfetch  /usr/bin/usalign/
-COPY --from=build /usr/src/usalign/pdb2fasta  /usr/bin/usalign/
-COPY --from=build /usr/src/usalign/pdb2ss  /usr/bin/usalign/
-COPY --from=build /usr/src/usalign/NWalign  /usr/bin/usalign/
-COPY --from=build /usr/src/usalign/HwRMSD  /usr/bin/usalign/
-COPY --from=build /usr/src/usalign/cif2pdb /usr/bin/usalign/
+# Set the working directory inside the container.
+WORKDIR /src
 
-CMD "/bin/bash"
+# Copy all the source code from your project directory into the container.
+COPY . .
+
+# Grant execute permissions to the build script.
+RUN chmod +x build.sh
+
+# Run the build script to compile all the tools.
+# The compiled files will be placed in the 'dist' directory inside the container.
+RUN ./build.sh
