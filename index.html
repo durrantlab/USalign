@@ -6,7 +6,7 @@
 </head>
 <body>
     <h1>US-align WebAssembly Test</h1>
-    <p>Fetching, aligning complexes by protein components, and downloading. Check the developer console for progress.</p>
+    <p>Fetching PDBs, aligning protein components, and downloading results. Check the developer console for progress.</p>
 
     <!-- Load FileSaver.js from a CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
@@ -17,61 +17,59 @@
     <!-- Our main script -->
     <script>
         /**
-         * Determines if a PDB file content represents a protein.
-         * @param {string} pdbContent The string content of the PDB file.
-         * @returns {boolean} True if the structure is likely a protein.
+         * Takes an array of PDB content strings, identifies the proteins, and aligns them all
+         * to the first protein structure in the array. Non-protein structures are returned unmodified.
+         *
+         * @param {string[]} pdbContents An array of strings, where each string is the content of a PDB file.
+         * @returns {Promise<string[]>} A promise that resolves to an array of PDB strings. Protein structures
+         *   will be aligned to the first protein; non-protein structures are returned as-is.
          */
-        function isProtein(pdbContent) {
+        async function alignPdbContents(pdbContents) {
+            if (!pdbContents || pdbContents.length === 0) {
+                return [];
+            }
+
+            // Helper function to check for protein content
+            const isProtein = (pdb) => {
             const proteinResidues = new Set(['ALA', 'CYS', 'ASP', 'GLU', 'PHE', 'GLY', 'HIS', 'ILE', 'LYS', 'LEU', 'MET', 'MSE', 'ASN', 'PRO', 'GLN', 'ARG', 'SER', 'THR', 'VAL', 'TRP', 'TYR']);
-            const lines = pdbContent.split('\n');
+                const lines = pdb.split('\n');
             for (const line of lines) {
                 if (line.startsWith('ATOM')) {
                     const resName = line.substring(17, 20).trim();
-                    if (proteinResidues.has(resName)) {
-                        return true; // Found a protein residue, can stop early
-                    }
+                        if (proteinResidues.has(resName)) return true;
                 }
             }
-            return false; // No protein residues found
-        }
+                return false;
+            };
 
-        /**
-         * Aligns multiple PDB structures against a reference structure by their protein components.
-         *
-         * @param {string[]} pdbContents An array of strings, where each string is the content of a PDB file.
-         * @param {number} referenceIndex The index of the structure in pdbContents to use as the reference/template.
-         * @param {boolean[]} isProteinMask A boolean array indicating which structures are proteins.
-         * @returns {Promise<string[]>} A promise that resolves to an array of strings, where each string is the content of an aligned PDB file.
-         */
-        async function alignStructuresByProtein(pdbContents, referenceIndex, isProteinMask) {
-            if (!pdbContents || pdbContents.length < 2) {
+            const isProteinMask = pdbContents.map(isProtein);
+            const referenceIndex = isProteinMask.findIndex(isP => isP === true);
+
+            if (referenceIndex === -1) {
+                console.warn("No protein structures found in the input list. Returning original structures.");
                 return pdbContents;
             }
 
-            console.log("Initializing US-align module for batch alignment...");
+            console.log(`Using structure #${referenceIndex} as the reference for alignment.`);
+
             if (typeof USalignModule === 'undefined') {
                 throw new Error("USalignModule is not defined. The script might have failed to load.");
             }
-
             const usalign = await USalignModule();
-            console.log("US-align module initialized.");
 
-            const alignedPdbResults = new Array(pdbContents.length).fill(null);
+            const alignedPdbResults = new Array(pdbContents.length);
             const referenceContent = pdbContents[referenceIndex];
             const referenceFilename = 'ref.pdb';
             
             usalign.FS.writeFile(referenceFilename, referenceContent);
-            alignedPdbResults[referenceIndex] = referenceContent;
             
             for (let i = 0; i < pdbContents.length; i++) {
-                if (i === referenceIndex) continue;
-
-                // --- Molecule Type Check ---
-                // Only align if the mobile structure is also a protein.
+                // If the structure is the reference or not a protein, pass it through unchanged.
+                if (i === referenceIndex || !isProteinMask[i]) {
+                    alignedPdbResults[i] = pdbContents[i];
                 if (!isProteinMask[i]) {
-                    const errorMsg = `Skipping alignment: Structure #${i} is not a protein.`;
-                    console.log(`\n${errorMsg}`);
-                    alignedPdbResults[i] = `ERROR: ${errorMsg}`;
+                        console.log(`\nSkipping structure #${i} because it is not a protein.`);
+                    }
                     continue;
                 }
 
@@ -79,21 +77,19 @@
                 const mobileFilename = `mobile_${i}.pdb`;
                 const outputFilename = `sup_${i}`;
 
-                console.log(`\nAligning mobile structure #${i} to reference #${referenceIndex} by protein components...`);
+                console.log(`\nAligning structure #${i} to reference #${referenceIndex}...`);
                 
                 usalign.FS.writeFile(mobileFilename, mobileContent);
 
                 const args = [mobileFilename, referenceFilename, '-o', outputFilename, '-mol', 'prot'];
-                console.log(`Running US-align with args: ${args.join(' ')}`);
                 
                 try {
                     usalign.callMain(args);
-                    const alignedContent = usalign.FS.readFile(`${outputFilename}.pdb`, { encoding: 'utf8' });
-                    alignedPdbResults[i] = alignedContent;
-                    console.log(`Alignment for mobile structure #${i} complete.`);
+                    alignedPdbResults[i] = usalign.FS.readFile(`${outputFilename}.pdb`, { encoding: 'utf8' });
+                    console.log(`Alignment for structure #${i} complete.`);
                 } catch (e) {
-                    console.error(`Failed to align mobile structure #${i}. Error:`, e);
-                    alignedPdbResults[i] = `ERROR: Alignment failed for mobile structure #${i}`;
+                    console.error(`Failed to align structure #${i}. Error:`, e);
+                    alignedPdbResults[i] = `ERROR: Alignment failed for structure #${i}`;
                 }
                 
                 usalign.FS.unlink(mobileFilename);
@@ -105,86 +101,6 @@
             console.log("\nAll alignments finished.");
             return alignedPdbResults;
             }
-
-        /**
-         * Finds the most representative structure in a set by calculating all-vs-all TM-scores on protein components.
-         * @param {string[]} pdbContents An array of PDB file contents.
-         * @param {boolean[]} isProteinMask A boolean array indicating which structures are proteins.
-         * @returns {Promise<number>} The index of the most representative structure.
-         */
-        async function findCentroidStructure(pdbContents, isProteinMask) {
-            console.log("Finding the most representative structure based on protein components...");
-            const numStructures = pdbContents.length;
-            if (numStructures <= 2) return 0;
-
-            const usalign = await USalignModule();
-            const avgTmScores = new Array(numStructures).fill(0);
-
-            for (let i = 0; i < numStructures; i++) {
-                // Only write protein files to the virtual FS to avoid parse warnings
-                if (isProteinMask[i]) {
-                usalign.FS.writeFile(`s${i}.pdb`, pdbContents[i]);
-                }
-            }
-
-            for (let i = 0; i < numStructures; i++) {
-                if (!isProteinMask[i]) continue; // Skip non-protein structures
-
-                for (let j = i + 1; j < numStructures; j++) {
-                    if (!isProteinMask[j]) continue; // Skip non-protein structures
-
-                    const args = [`s${i}.pdb`, `s${j}.pdb`, '-outfmt', '2', '-mol', 'prot'];
-                    let tmScore1 = 0, tmScore2 = 0;
-                    
-                    let output = '';
-                    usalign.stdout = (text) => { output += text + '\n'; };
-                    
-                    try {
-                        usalign.callMain(args);
-                        const lines = output.trim().split('\n');
-                        const lastLine = lines[lines.length - 1];
-                        if (lastLine && !lastLine.startsWith('#')) {
-                            const fields = lastLine.split(/\s+/);
-                            tmScore1 = parseFloat(fields[2]) || 0;
-                            tmScore2 = parseFloat(fields[3]) || 0;
-                        }
-                    } catch (e) {
-                        // This might fail if one structure has no protein, which is fine.
-                    }
-                    
-                    avgTmScores[i] += tmScore2;
-                    avgTmScores[j] += tmScore1;
-                }
-            }
-            usalign.stdout = (text) => { console.log(text); };
-
-            // Clean up files
-            for (let i = 0; i < numStructures; i++) {
-                if (isProteinMask[i]) {
-                usalign.FS.unlink(`s${i}.pdb`);
-                }
-            }
-            
-            let bestIndex = -1;
-            let highestAvgScore = -1;
-            avgTmScores.forEach((score, index) => {
-                if (!isProteinMask[index]) return; // Only consider proteins for the reference
-                const proteinCount = isProteinMask.filter(Boolean).length;
-                const avgScore = (proteinCount > 1) ? score / (proteinCount - 1) : 0;
-                console.log(`Structure #${index} (${isProteinMask[index] ? 'protein' : 'non-protein'}) average protein TM-score: ${avgScore.toFixed(4)}`);
-                if (avgScore > highestAvgScore) {
-                    highestAvgScore = avgScore;
-                    bestIndex = index;
-                }
-            });
-            
-            if (bestIndex === -1) { // This happens if there are < 2 proteins
-                bestIndex = isProteinMask.findIndex(p => p); // Find the first available protein
-            }
-
-            console.log(`Selected reference structure #${bestIndex} as it has the most representative protein component.`);
-            return bestIndex;
-        }
 
         // --- Main execution logic ---
         async function main() {
@@ -207,30 +123,18 @@
             }
 
             try {
-                // Pre-calculate which structures are proteins
-                const isProteinMask = pdbContents.map(content => isProtein(content));
-
-                // Find the best structure to use as a reference
-                const referenceIndex = await findCentroidStructure(pdbContents, isProteinMask);
-
-                if (referenceIndex === -1) {
-                    console.error("No suitable protein structures found to act as a reference. Stopping.");
-                    return;
-                }
-                
-                // Align all protein structures to the chosen reference
-                const alignedStructures = await alignStructuresByProtein(pdbContents, referenceIndex, isProteinMask);
+                // Align all protein structures to the first available protein
+                const alignedStructures = await alignPdbContents(pdbContents);
                 
                 console.log("\n--- Triggering downloads for aligned PDBs ---");
                 alignedStructures.forEach((content, index) => {
                     if (content && !content.startsWith("ERROR:")) {
                         const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-                        const filename = (index === referenceIndex) ? 
-                            `${pdbIds[index]}_ref.pdb` :
-                            `${pdbIds[index]}_aligned_to_${pdbIds[referenceIndex]}.pdb`;
+                        // A more general filename for the download
+                        const filename = `${pdbIds[index]}_aligned.pdb`;
                         saveAs(blob, filename);
                     } else {
-                        console.warn(`Skipping download for ${pdbIds[index]} because it is not a protein or alignment failed.`);
+                        console.warn(`Skipping download for ${pdbIds[index]} due to alignment error or incompatibility.`);
                     }
                 });
                 console.log("-------------------------------------------");
