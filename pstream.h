@@ -16,7 +16,7 @@
  */
 
 /* do not compile on windows, which does not have cygwin */
-#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) && !defined(__CYGWIN__)
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) && !defined(__CYGWIN__) || defined(__EMSCRIPTEN__)
 #define NO_PSTREAM
 #else
 
@@ -29,21 +29,21 @@
 #include <ostream>
 #include <string>
 #include <vector>
-#include <algorithm>    // for min()
-#include <cerrno>       // for errno
-#include <cstddef>      // for size_t, NULL
-#include <cstdlib>      // for exit()
+#include <algorithm> // for min()
+#include <cerrno>    // for errno
+#include <cstddef>   // for size_t, NULL
+#include <cstdlib>   // for exit()
 #include <sys/types.h>  // for pid_t
 #include <sys/wait.h>   // for waitpid()
 #include <sys/ioctl.h>  // for ioctl() and FIONREAD
 #if defined(__sun)
 # include <sys/filio.h> // for FIONREAD on Solaris 2.5
 #endif
-#include <unistd.h>     // for pipe() fork() exec() and filedes functions
-#include <signal.h>     // for kill()
-#include <fcntl.h>      // for fcntl()
+#include <unistd.h>  // for pipe() fork() exec() and filedes functions
+#include <signal.h>  // for kill()
+#include <fcntl.h>   // for fcntl()
 #if REDI_EVISCERATE_PSTREAMS
-# include <stdio.h>     // for FILE, fdopen()
+# include <stdio.h>  // for FILE, fdopen()
 #endif
 
 

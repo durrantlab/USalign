@@ -1373,8 +1373,9 @@ void output_flexalign_pymol(const string xname, const string yname,
     }
     else
 #endif
+ {
         fin.open(xname.c_str());
-
+ }
     map<string,int> resi2hinge_dict;
     int r,i,j;
     j=-1;

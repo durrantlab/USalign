@@ -243,6 +243,9 @@ size_t get_all_mmcif_lines(const string filename, const string chain_opt,
     
     int compress_type=0; // uncompressed file
     ifstream fin;
+#ifndef REDI_PSTREAM_H_SEEN
+ ifstream fin_gz;
+#else
     redi::ipstream fin_gz; // if file is compressed
     if (filename.size()>=3 && 
         filename.substr(filename.size()-3,3)==".gz")
@@ -257,6 +260,7 @@ size_t get_all_mmcif_lines(const string filename, const string chain_opt,
         compress_type=2;
     }
     else
+#endif
     {
         if (filename=="-") compress_type=-1;
         else fin.open(filename.c_str());

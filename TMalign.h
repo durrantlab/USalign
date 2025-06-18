@@ -1501,8 +1501,9 @@ void output_pymol(const string xname, const string yname,
     }
     else
 #endif
+ {
         fin.open(xname.c_str());
-
+ }
     stringstream buf;
     stringstream buf_pymol;
     string line;
@@ -1945,8 +1946,9 @@ void output_mTMalign_pymol(const vector<string>&chain_list,
         }
         else
 #endif
+  {
         fin.open(name.c_str());
-
+  }
         stringstream buf;
         buf<<fname_super<<'.'<<m<<".pdb";
         filename=buf.str();
